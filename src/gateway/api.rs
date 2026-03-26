@@ -9,6 +9,10 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::Deserialize;
+use std::collections::HashMap;
+
+use crate::channels::session_backend::SessionBackend;
+use chrono::{DateTime, Utc};
 
 const MASKED_SECRET: &str = "***MASKED***";
 
@@ -124,6 +128,90 @@ pub async fn handle_api_status(
     });
 
     Json(body).into_response()
+}
+
+/// Logical channel name for a persisted session key (`channel__id`, or `gw_*` for dashboard chat).
+fn parse_channel_from_session_key(key: &str) -> &str {
+    if key.starts_with("gw_") {
+        return "gateway";
+    }
+    key.split("__").next().unwrap_or(key)
+}
+
+/// Sums message counts and latest activity per logical channel across all persisted sessions.
+fn aggregate_channel_session_stats(
+    backend: &dyn SessionBackend,
+) -> HashMap<String, (usize, Option<DateTime<Utc>>)> {
+    let mut map: HashMap<String, (usize, Option<DateTime<Utc>>)> = HashMap::new();
+    for meta in backend.list_sessions_with_metadata() {
+        let ch = parse_channel_from_session_key(&meta.key).to_string();
+        let entry = map.entry(ch).or_insert((0, None));
+        entry.0 += meta.message_count;
+        let new_last = match entry.1 {
+            None => meta.last_activity,
+            Some(prev) => prev.max(meta.last_activity),
+        };
+        entry.1 = Some(new_last);
+    }
+    map
+}
+
+/// GET /api/channels — per-channel summary for the dashboard Channels tab
+pub async fn handle_api_channels(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+
+    let config = state.config.lock().clone();
+    let health = crate::health::snapshot();
+
+    let stats: HashMap<String, (usize, Option<DateTime<Utc>>)> = state
+        .session_backend
+        .as_ref()
+        .map(|b| aggregate_channel_session_stats(b.as_ref()))
+        .unwrap_or_default();
+
+    let channels_global_error = health
+        .components
+        .get("channels")
+        .is_some_and(|c| c.status == "error");
+
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+
+    for (handle, enabled) in config.channels_config.channels() {
+        let name = handle.name().to_string();
+        let channel_type = name.clone();
+        let (message_count, last_message_at) = stats.get(&name).copied().unwrap_or((0, None));
+
+        let (status, health_en) = if !enabled {
+            ("inactive", "down")
+        } else if channels_global_error {
+            ("error", "degraded")
+        } else {
+            ("active", "healthy")
+        };
+
+        rows.push(serde_json::json!({
+            "name": name,
+            "type": channel_type,
+            "enabled": enabled,
+            "status": status,
+            "message_count": message_count,
+            "last_message_at": last_message_at.map(|t| t.to_rfc3339()),
+            "health": health_en,
+        }));
+    }
+
+    rows.sort_by(|a, b| {
+        let an = a["name"].as_str().unwrap_or("");
+        let bn = b["name"].as_str().unwrap_or("");
+        an.cmp(bn)
+    });
+
+    Json(rows).into_response()
 }
 
 /// GET /api/config — current config (api_key masked)
@@ -1659,6 +1747,19 @@ mod tests {
             .expect("response body")
             .to_bytes();
         serde_json::from_slice(&body).expect("valid json response")
+    }
+
+    #[test]
+    fn parse_channel_from_session_key_handles_gateway_and_double_underscore() {
+        assert_eq!(super::parse_channel_from_session_key("gw_sess1"), "gateway");
+        assert_eq!(
+            super::parse_channel_from_session_key("telegram__alice"),
+            "telegram"
+        );
+        assert_eq!(
+            super::parse_channel_from_session_key("discord__bob__extra"),
+            "discord"
+        );
     }
 
     #[test]

@@ -305,10 +305,52 @@ export function getCost(): Promise<CostSummary> {
 // Sessions
 // ---------------------------------------------------------------------------
 
+/** Map gateway `/api/sessions` rows (e.g. `session_id`, `created_at`) to dashboard `Session`. */
+function normalizeSessionRecord(raw: unknown): Session | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  const id =
+    typeof r.session_id === 'string'
+      ? r.session_id
+      : typeof r.id === 'string'
+        ? r.id
+        : '';
+  if (!id) {
+    return null;
+  }
+  const channel =
+    typeof r.channel === 'string'
+      ? r.channel
+      : typeof r.name === 'string'
+        ? r.name
+        : 'gateway';
+  const started_at =
+    typeof r.started_at === 'string'
+      ? r.started_at
+      : typeof r.created_at === 'string'
+        ? r.created_at
+        : '';
+  const last_activity = typeof r.last_activity === 'string' ? r.last_activity : '';
+  const message_count =
+    typeof r.message_count === 'number' && Number.isFinite(r.message_count) ? r.message_count : 0;
+  const statusRaw = typeof r.status === 'string' ? r.status : 'active';
+  const status: Session['status'] =
+    statusRaw === 'idle' || statusRaw === 'closed' || statusRaw === 'active'
+      ? statusRaw
+      : 'active';
+  return { id, channel, started_at, last_activity, status, message_count };
+}
+
 export function getSessions(): Promise<Session[]> {
-  return apiFetch<Session[] | { sessions: Session[] }>('/api/sessions').then((data) =>
-    unwrapField(data, 'sessions'),
-  );
+  return apiFetch<Session[] | { sessions: unknown[] }>('/api/sessions').then((data) => {
+    const list = unwrapField(data, 'sessions');
+    if (!Array.isArray(list)) {
+      return [];
+    }
+    return list.map(normalizeSessionRecord).filter((s): s is Session => s !== null);
+  });
 }
 
 export function getSession(id: string): Promise<Session> {

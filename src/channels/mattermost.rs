@@ -1220,6 +1220,13 @@ mod tests {
 
     #[test]
     fn mattermost_manager_none_and_warn_on_init_failure() {
+        // Ensure env fallback keys do not satisfy an intentionally empty config.api_key.
+        // SAFETY: test-only, single-threaded test runner.
+        unsafe {
+            std::env::remove_var("GROQ_API_KEY");
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("TRANSCRIPTION_API_KEY");
+        }
         let ch = make_channel(vec!["*".into()], false).with_transcription(
             crate::config::TranscriptionConfig {
                 enabled: true,

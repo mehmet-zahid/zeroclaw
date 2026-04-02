@@ -14,7 +14,6 @@ use ratatui::{
 };
 use std::io::{self, IsTerminal};
 
-
 use crate::config::Config;
 use crate::config::schema::{
     DiscordConfig, FeishuConfig, IMessageConfig, IrcConfig, LarkConfig, LarkReceiveMode,
@@ -1698,7 +1697,7 @@ fn render_setup_mode(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, mode)| SelectableItem {
-            label: mode.to_string(),
+            label: (*mode).to_string(),
             hint: match i {
                 0 => "recommended".to_string(),
                 1 => "advanced".to_string(),
@@ -1904,8 +1903,8 @@ fn render_provider_tier(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, (name, desc))| SelectableItem {
-            label: name.to_string(),
-            hint: desc.to_string(),
+            label: (*name).to_string(),
+            hint: (*desc).to_string(),
             is_active: i == app.provider_tier_idx,
             installed: false,
         })
@@ -1954,8 +1953,8 @@ fn render_provider_select(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, (name, desc, _id))| SelectableItem {
-            label: name.to_string(),
-            hint: desc.to_string(),
+            label: (*name).to_string(),
+            hint: (*desc).to_string(),
             is_active: i == app.provider_idx,
             installed: false,
         })
@@ -2121,7 +2120,7 @@ fn render_model_select(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, model)| SelectableItem {
-            label: model.to_string(),
+            label: (*model).to_string(),
             hint: if i == 0 {
                 "default".to_string()
             } else {
@@ -2316,11 +2315,11 @@ fn render_channel_select(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, (name, hint, installed))| SelectableItem {
-            label: name.to_string(),
+            label: (*name).to_string(),
             hint: if *installed {
-                format!("{hint} \u{2713} installed")
+                format!("{} \u{2713} installed", *hint)
             } else {
-                hint.to_string()
+                (*hint).to_string()
             },
             is_active: i == app.channel_idx,
             installed: *installed,
@@ -2395,8 +2394,8 @@ fn render_web_search_provider(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, (name, hint))| SelectableItem {
-            label: name.to_string(),
-            hint: hint.to_string(),
+            label: (*name).to_string(),
+            hint: (*hint).to_string(),
             is_active: i == app.search_provider_idx,
             installed: false,
         })
@@ -2496,8 +2495,8 @@ fn render_skills_install(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, (name, desc))| SelectableItem {
-            label: name.to_string(),
-            hint: desc.to_string(),
+            label: (*name).to_string(),
+            hint: (*desc).to_string(),
             is_active: i == app.skills_idx,
             installed: false,
         })
